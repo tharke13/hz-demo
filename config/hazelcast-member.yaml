@@ -1,0 +1,46 @@
+hazelcast:
+  cluster-name: hz-demo-cluster
+  properties:
+    hazelcast.logging.type: slf4j
+  network:
+    port:
+      auto-increment: false
+      port: 5701
+    join:
+      multicast:
+        enabled: false
+      tcp-ip:
+        enabled: true
+        member-list:
+          - hazelcast-1:5701
+          - hazelcast-2:5701
+          - hazelcast-3:5701
+  map:
+    document-annotation-ids:
+      backup-count: 2
+      async-backup-count: 0
+      statistics-enabled: true
+      per-entry-stats-enabled: true
+      merge-policy:
+        batch-size: 100
+        class-name: dev.ekhart.hzdemo.cacheservice.member.AnnotationIdListUnionMergePolicy
+      map-store:
+        enabled: true
+        class-name: dev.ekhart.hzdemo.cacheservice.member.DocumentAnnotationIdsMapStore
+        initial-mode: LAZY
+        properties:
+          connection-string: mongodb://mongo:27017/hz-demo
+          database: hz-demo
+          collection: document-annotation-ids
+    annotation-objects:
+      backup-count: 2
+      async-backup-count: 0
+      statistics-enabled: true
+      map-store:
+        enabled: true
+        class-name: dev.ekhart.hzdemo.cacheservice.member.AnnotationObjectMapStore
+        initial-mode: LAZY
+        properties:
+          connection-string: mongodb://mongo:27017/hz-demo
+          database: hz-demo
+          collection: annotation-objects

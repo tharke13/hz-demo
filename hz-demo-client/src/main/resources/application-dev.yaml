@@ -1,0 +1,19 @@
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+server:
+  port: 8080
+
+app:
+  hazelcast:
+    cluster-name: hz-demo-cluster
+    document-map-name: document-annotation-ids
+    annotation-map-name: annotation-objects
+    routing-mode: ALL_MEMBERS
+    async-start: true
+    members:
+      - localhost:5701
+      - localhost:5702
+      - localhost:5703

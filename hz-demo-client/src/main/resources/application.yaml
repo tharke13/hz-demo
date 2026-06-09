@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: hz-demo-client
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+app:
+  hazelcast:
+    cluster-name: hz-demo-cluster
+    document-map-name: document-annotation-ids
+    annotation-map-name: annotation-objects
+    routing-mode: ALL_MEMBERS
+    async-start: true
+    members:
+      - localhost:5701
+      - localhost:5702
+      - localhost:5703

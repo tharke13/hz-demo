@@ -1,0 +1,37 @@
+package dev.ekhart.hzdemo.client;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.core.env.Environment;
+import org.springframework.stereotype.Component;
+
+@SpringBootApplication(scanBasePackages = "dev.ekhart.hzdemo")
+public class HzDemoClientApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(HzDemoClientApplication.class, args);
+    }
+
+    @Component
+    static class SwaggerUiStartupLogger {
+
+        private static final Logger log = LoggerFactory.getLogger(SwaggerUiStartupLogger.class);
+
+        private final Environment environment;
+
+        SwaggerUiStartupLogger(Environment environment) {
+            this.environment = environment;
+        }
+
+        @EventListener(ApplicationReadyEvent.class)
+        void logSwaggerUiUrl() {
+            String port = environment.getProperty("local.server.port", environment.getProperty("server.port", "8080"));
+            String swaggerPath = environment.getProperty("springdoc.swagger-ui.path", "/swagger-ui.html");
+            log.info("Swagger UI: http://localhost:{}{}", port, swaggerPath);
+        }
+    }
+}

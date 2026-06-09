@@ -1,0 +1,57 @@
+services:
+  mongo:
+    image: mongo:7.0
+    hostname: mongo
+    environment:
+      MONGO_INITDB_DATABASE: hz-demo
+    ports:
+      - "27017:27017"
+
+  hazelcast-1:
+    build:
+      context: .
+      dockerfile: docker/hazelcast-member/Dockerfile
+    hostname: hazelcast-1
+    depends_on:
+      - mongo
+    environment:
+      HZ_NETWORK_PUBLICADDRESS: localhost:5701
+    ports:
+      - "5701:5701"
+
+  hazelcast-2:
+    build:
+      context: .
+      dockerfile: docker/hazelcast-member/Dockerfile
+    hostname: hazelcast-2
+    depends_on:
+      - mongo
+    environment:
+      HZ_NETWORK_PUBLICADDRESS: localhost:5702
+    ports:
+      - "5702:5701"
+
+  hazelcast-3:
+    build:
+      context: .
+      dockerfile: docker/hazelcast-member/Dockerfile
+    hostname: hazelcast-3
+    depends_on:
+      - mongo
+    environment:
+      HZ_NETWORK_PUBLICADDRESS: localhost:5703
+    ports:
+      - "5703:5701"
+
+  management-center:
+    image: hazelcast/management-center:5.1
+    hostname: management-center
+    depends_on:
+      - hazelcast-1
+      - hazelcast-2
+      - hazelcast-3
+    environment:
+      MC_DEFAULT_CLUSTER: hz-demo-cluster
+      MC_DEFAULT_CLUSTER_MEMBERS: hazelcast-1:5701,hazelcast-2:5701,hazelcast-3:5701
+    ports:
+      - "8081:8080"
