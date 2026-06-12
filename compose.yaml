@@ -7,13 +7,28 @@ services:
     ports:
       - "27017:27017"
 
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    hostname: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
   hazelcast-1:
     build:
       context: .
       dockerfile: docker/hazelcast-member/Dockerfile
     hostname: hazelcast-1
     depends_on:
-      - mongo
+      mongo:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
     environment:
       HZ_NETWORK_PUBLICADDRESS: localhost:5701
     ports:
@@ -25,7 +40,10 @@ services:
       dockerfile: docker/hazelcast-member/Dockerfile
     hostname: hazelcast-2
     depends_on:
-      - mongo
+      mongo:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
     environment:
       HZ_NETWORK_PUBLICADDRESS: localhost:5702
     ports:
@@ -37,7 +55,10 @@ services:
       dockerfile: docker/hazelcast-member/Dockerfile
     hostname: hazelcast-3
     depends_on:
-      - mongo
+      mongo:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
     environment:
       HZ_NETWORK_PUBLICADDRESS: localhost:5703
     ports:

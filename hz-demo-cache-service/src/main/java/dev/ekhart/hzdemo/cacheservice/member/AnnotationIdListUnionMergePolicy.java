@@ -5,16 +5,16 @@ import com.hazelcast.nio.ObjectDataOutput;
 import com.hazelcast.spi.merge.SplitBrainMergePolicy;
 import com.hazelcast.spi.merge.SplitBrainMergeTypes;
 import java.io.IOException;
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashSet;
-import java.util.List;
+import java.util.Set;
 
 public class AnnotationIdListUnionMergePolicy implements
-        SplitBrainMergePolicy<List<String>, SplitBrainMergeTypes.MapMergeTypes<String, List<String>>, List<String>> {
+        SplitBrainMergePolicy<Set<String>, SplitBrainMergeTypes.MapMergeTypes<String, Set<String>>, Set<String>> {
 
     @Override
-    public List<String> merge(SplitBrainMergeTypes.MapMergeTypes<String, List<String>> mergingValue,
-            SplitBrainMergeTypes.MapMergeTypes<String, List<String>> existingValue) {
+    public Set<String> merge(SplitBrainMergeTypes.MapMergeTypes<String, Set<String>> mergingValue,
+            SplitBrainMergeTypes.MapMergeTypes<String, Set<String>> existingValue) {
         if (existingValue == null) {
             return copyOf(mergingValue.getValue());
         }
@@ -29,14 +29,14 @@ public class AnnotationIdListUnionMergePolicy implements
     public void readData(ObjectDataInput in) throws IOException {
     }
 
-    static List<String> union(List<String> preferred, List<String> incoming) {
+    static Set<String> union(Set<String> preferred, Set<String> incoming) {
         LinkedHashSet<String> merged = new LinkedHashSet<>();
         addAll(merged, preferred);
         addAll(merged, incoming);
-        return List.copyOf(new ArrayList<>(merged));
+        return Collections.unmodifiableSet(merged);
     }
 
-    private static void addAll(LinkedHashSet<String> merged, List<String> annotationIds) {
+    private static void addAll(LinkedHashSet<String> merged, Set<String> annotationIds) {
         if (annotationIds == null) {
             return;
         }
@@ -48,7 +48,12 @@ public class AnnotationIdListUnionMergePolicy implements
         }
     }
 
-    private static List<String> copyOf(List<String> annotationIds) {
-        return annotationIds == null ? List.of() : List.copyOf(annotationIds);
+    private static Set<String> copyOf(Set<String> annotationIds) {
+        if (annotationIds == null) {
+            return Set.of();
+        }
+        LinkedHashSet<String> copy = new LinkedHashSet<>();
+        addAll(copy, annotationIds);
+        return Collections.unmodifiableSet(copy);
     }
 }

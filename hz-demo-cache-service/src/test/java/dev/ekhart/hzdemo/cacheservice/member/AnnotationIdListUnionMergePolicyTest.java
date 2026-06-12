@@ -5,7 +5,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.hazelcast.spi.merge.SplitBrainMergeTypes;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class AnnotationIdListUnionMergePolicyTest {
@@ -14,20 +16,24 @@ class AnnotationIdListUnionMergePolicyTest {
 
     @Test
     void mergesListsAndDedupesByAnnotationId() {
-        List<String> merged = mergePolicy.merge(mapValue(List.of("a-1", "a-3")), mapValue(List.of("a-1", "a-2")));
+        Set<String> merged = mergePolicy.merge(mapValue(linkedSet("a-1", "a-3")), mapValue(linkedSet("a-1", "a-2")));
 
         assertThat(merged).containsExactly("a-1", "a-2", "a-3");
     }
 
     @Test
     void returnsIncomingListWhenExistingValueIsMissing() {
-        assertThat(mergePolicy.merge(mapValue(List.of("a-1")), null)).containsExactly("a-1");
+        assertThat(mergePolicy.merge(mapValue(linkedSet("a-1")), null)).containsExactly("a-1");
     }
 
-    private SplitBrainMergeTypes.MapMergeTypes<String, List<String>> mapValue(List<String> annotationIds) {
+    private SplitBrainMergeTypes.MapMergeTypes<String, Set<String>> mapValue(Set<String> annotationIds) {
         @SuppressWarnings("unchecked")
-        SplitBrainMergeTypes.MapMergeTypes<String, List<String>> mergingValue = mock(SplitBrainMergeTypes.MapMergeTypes.class);
+        SplitBrainMergeTypes.MapMergeTypes<String, Set<String>> mergingValue = mock(SplitBrainMergeTypes.MapMergeTypes.class);
         when(mergingValue.getValue()).thenReturn(annotationIds);
         return mergingValue;
+    }
+
+    private Set<String> linkedSet(String... values) {
+        return new LinkedHashSet<>(List.of(values));
     }
 }

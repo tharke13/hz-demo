@@ -8,7 +8,7 @@ This repo is a small multi-module Hazelcast demo built around an append-only ann
 - `hz-demo-cache-service`: Hazelcast client integration, member-side map stores, merge policy
 - `hz-demo-client`: Spring Boot client app for testing cache service with HTTP API
 
-The application runs as a Hazelcast client. The local demo cluster is 3 Hazelcast members plus MongoDB and Hazelcast Management Center.
+The application runs as a Hazelcast client. The local demo cluster is 3 Hazelcast members plus MongoDB, RabbitMQ, and Hazelcast Management Center.
 Compose and Testcontainers use the same custom Hazelcast member image defined in `docker/hazelcast-member/Dockerfile`.
 
 ## Local Runtime
@@ -33,6 +33,8 @@ Ports:
 - Hazelcast members: `5701`, `5702`, `5703`
 - Hazelcast Management Center: `8181`
 - MongoDB: `27017`
+- RabbitMQ AMQP: `5672`
+- RabbitMQ Management UI: `15672`
 
 ## Run The App
 
@@ -115,12 +117,18 @@ Example batch append payload:
 
 ## Data Model
 
-The cache uses two Hazelcast maps backed by MongoDB:
+The cache uses two Hazelcast maps:
 
 - `document-annotation-ids`
   - `documentId -> List<String annotationId>`
+  - lazy-loaded from and written through to MongoDB
 - `annotation-objects`
   - `annotationId -> Annotation`
+  - lazy-loaded from MongoDB
+  - writes publish persistent JSON messages to the durable RabbitMQ topic exchange `hz-demo.annotation-objects`
+
+The Spring app binds the durable queue `hz-demo.annotation-objects.mongo` to that topic with routing key `annotation.objects`.
+Its Rabbit listener consumes annotation object messages and upserts them into the MongoDB `annotation-objects` collection, while external consumers can bind their own durable queues to the same exchange.
 
 The service layer coordinates writes across both maps under a document-level Hazelcast lock.
 Cache statistics are collected by executing a member-side callable on each Hazelcast member and combining the returned `LocalMapStats` with the cluster-wide map size.

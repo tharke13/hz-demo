@@ -15,10 +15,12 @@ import dev.ekhart.hzdemo.cacheservice.config.HazelcastClientProperties;
 import dev.ekhart.hzdemo.models.annotations.Annotation;
 import dev.ekhart.hzdemo.models.cluster.CacheMapMemberStatsResponse;
 import dev.ekhart.hzdemo.models.cluster.CacheMapStatsResponse;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
@@ -30,13 +32,13 @@ class HazelcastAnnotationServiceTest {
         HazelcastClientProperties properties = new HazelcastClientProperties();
         HazelcastAnnotationService service = service(properties);
         @SuppressWarnings("unchecked")
-        IMap<String, List<String>> documentMap = mock(IMap.class);
+        IMap<String, Set<String>> documentMap = mock(IMap.class);
         @SuppressWarnings("unchecked")
         IMap<String, Annotation> annotationMap = mock(IMap.class);
         Annotation first = annotation(0, 4, "A");
         Annotation second = annotation(5, 8, "B");
 
-        when(documentMap.get("document-1")).thenReturn(List.of(first.getId()));
+        when(documentMap.get("document-1")).thenReturn(linkedSet(first.getId()));
         when(annotationMap.putIfAbsent(second.getId(), second)).thenReturn(null);
         when(annotationMap.getAll(java.util.Set.of(first.getId(), second.getId()))).thenReturn(new LinkedHashMap<>(Map.of(
                 first.getId(), first,
@@ -49,7 +51,7 @@ class HazelcastAnnotationServiceTest {
         inOrder.verify(documentMap).lock("document-1");
         inOrder.verify(documentMap).get("document-1");
         inOrder.verify(annotationMap).putIfAbsent(second.getId(), second);
-        inOrder.verify(documentMap).put("document-1", List.of(first.getId(), second.getId()));
+        inOrder.verify(documentMap).put("document-1", linkedSet(first.getId(), second.getId()));
         inOrder.verify(annotationMap).getAll(java.util.Set.of(first.getId(), second.getId()));
         inOrder.verify(documentMap).unlock("document-1");
     }
@@ -59,14 +61,14 @@ class HazelcastAnnotationServiceTest {
         HazelcastClientProperties properties = new HazelcastClientProperties();
         HazelcastAnnotationService service = service(properties);
         @SuppressWarnings("unchecked")
-        IMap<String, List<String>> documentMap = mock(IMap.class);
+        IMap<String, Set<String>> documentMap = mock(IMap.class);
         @SuppressWarnings("unchecked")
         IMap<String, Annotation> annotationMap = mock(IMap.class);
         Annotation existing = annotation(0, 4, "A");
         Annotation second = annotation(5, 8, "B");
         Annotation third = annotation(9, 12, "C");
 
-        when(documentMap.get("document-1")).thenReturn(List.of(existing.getId()));
+        when(documentMap.get("document-1")).thenReturn(linkedSet(existing.getId()));
         when(annotationMap.putIfAbsent(second.getId(), second)).thenReturn(null);
         when(annotationMap.putIfAbsent(third.getId(), third)).thenReturn(null);
         when(annotationMap.getAll(java.util.Set.of(existing.getId(), second.getId(), third.getId())))
@@ -84,7 +86,7 @@ class HazelcastAnnotationServiceTest {
         inOrder.verify(documentMap).get("document-1");
         inOrder.verify(annotationMap).putIfAbsent(second.getId(), second);
         inOrder.verify(annotationMap).putIfAbsent(third.getId(), third);
-        inOrder.verify(documentMap).put("document-1", List.of(existing.getId(), second.getId(), third.getId()));
+        inOrder.verify(documentMap).put("document-1", linkedSet(existing.getId(), second.getId(), third.getId()));
         inOrder.verify(annotationMap).getAll(java.util.Set.of(existing.getId(), second.getId(), third.getId()));
         inOrder.verify(documentMap).unlock("document-1");
     }
@@ -94,14 +96,14 @@ class HazelcastAnnotationServiceTest {
         HazelcastClientProperties properties = new HazelcastClientProperties();
         HazelcastAnnotationService service = service(properties);
         @SuppressWarnings("unchecked")
-        IMap<String, List<String>> documentMap = mock(IMap.class);
+        IMap<String, Set<String>> documentMap = mock(IMap.class);
         @SuppressWarnings("unchecked")
         IMap<String, Annotation> annotationMap = mock(IMap.class);
         Annotation annotation = annotation(0, 4, "A");
 
-        when(documentMap.get("document-1")).thenReturn(List.of());
+        when(documentMap.get("document-1")).thenReturn(linkedSet());
         when(annotationMap.putIfAbsent(annotation.getId(), annotation)).thenReturn(null);
-        doThrow(new IllegalStateException("boom")).when(documentMap).put("document-1", List.of(annotation.getId()));
+        doThrow(new IllegalStateException("boom")).when(documentMap).put("document-1", linkedSet(annotation.getId()));
 
         assertThatThrownBy(() -> service.append("document-1", annotation, documentMap, annotationMap))
                 .isInstanceOf(IllegalStateException.class)
@@ -116,19 +118,19 @@ class HazelcastAnnotationServiceTest {
         HazelcastClientProperties properties = new HazelcastClientProperties();
         HazelcastAnnotationService service = service(properties);
         @SuppressWarnings("unchecked")
-        IMap<String, List<String>> documentMap = mock(IMap.class);
+        IMap<String, Set<String>> documentMap = mock(IMap.class);
         @SuppressWarnings("unchecked")
         IMap<String, Annotation> annotationMap = mock(IMap.class);
         Annotation existing = annotation(0, 4, "A");
         Annotation reused = annotation(5, 8, "B");
         Annotation created = annotation(9, 12, "C");
 
-        when(documentMap.get("document-1")).thenReturn(List.of(existing.getId()));
+        when(documentMap.get("document-1")).thenReturn(linkedSet(existing.getId()));
         when(annotationMap.putIfAbsent(reused.getId(), reused)).thenReturn(reused);
         when(annotationMap.putIfAbsent(created.getId(), created)).thenReturn(null);
         doThrow(new IllegalStateException("boom")).when(documentMap).put(
                 "document-1",
-                List.of(existing.getId(), reused.getId(), created.getId())
+                linkedSet(existing.getId(), reused.getId(), created.getId())
         );
 
         assertThatThrownBy(() -> service.appendAll("document-1", List.of(reused, created), documentMap, annotationMap))
@@ -144,13 +146,13 @@ class HazelcastAnnotationServiceTest {
         HazelcastClientProperties properties = new HazelcastClientProperties();
         HazelcastAnnotationService service = service(properties);
         @SuppressWarnings("unchecked")
-        IMap<String, List<String>> documentMap = mock(IMap.class);
+        IMap<String, Set<String>> documentMap = mock(IMap.class);
         @SuppressWarnings("unchecked")
         IMap<String, Annotation> annotationMap = mock(IMap.class);
         Annotation shared = annotation(0, 4, "A");
         Annotation second = annotation(5, 8, "B");
 
-        when(documentMap.get("document-1")).thenReturn(List.of(shared.getId(), second.getId(), shared.getId()));
+        when(documentMap.get("document-1")).thenReturn(linkedSet(shared.getId(), second.getId()));
         when(annotationMap.getAll(java.util.Set.of(shared.getId(), second.getId()))).thenReturn(new LinkedHashMap<>(Map.of(
                 shared.getId(), shared,
                 second.getId(), second
@@ -158,7 +160,7 @@ class HazelcastAnnotationServiceTest {
 
         Optional<List<Annotation>> result = service.get("document-1", documentMap, annotationMap);
 
-        assertThat(result).contains(List.of(shared, second, shared));
+        assertThat(result).contains(List.of(shared, second));
         verify(documentMap).lock("document-1");
         verify(documentMap).unlock("document-1");
     }
@@ -168,7 +170,7 @@ class HazelcastAnnotationServiceTest {
         HazelcastClientProperties properties = new HazelcastClientProperties();
         HazelcastAnnotationService service = service(properties);
         @SuppressWarnings("unchecked")
-        IMap<String, List<String>> documentMap = mock(IMap.class);
+        IMap<String, Set<String>> documentMap = mock(IMap.class);
         IExecutorService executorService = mock(IExecutorService.class);
         CacheMapMemberStatsResponse hazelcast2 = CacheMapMemberStatsResponse.builder()
                 .member("[localhost]:5702")
@@ -203,9 +205,14 @@ class HazelcastAnnotationServiceTest {
 
     private Annotation annotation(int start, int end, String value) {
         return Annotation.builder()
+                .docId("document-1")
                 .start(start)
                 .end(end)
                 .value(value)
                 .build();
+    }
+
+    private Set<String> linkedSet(String... values) {
+        return new LinkedHashSet<>(List.of(values));
     }
 }

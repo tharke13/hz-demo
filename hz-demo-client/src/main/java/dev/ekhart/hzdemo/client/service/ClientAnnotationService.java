@@ -29,6 +29,10 @@ public class ClientAnnotationService {
         return hazelcastAnnotationService.get(documentId);
     }
 
+    public void clearAll() {
+        hazelcastAnnotationService.clearAll();
+    }
+
     public ClusterDetailsResponse clusterDetails() {
         return hazelcastAnnotationService.clusterDetails();
     }

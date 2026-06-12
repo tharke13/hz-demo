@@ -11,11 +11,13 @@ import dev.ekhart.hzdemo.models.cluster.CacheMapStatsResponse;
 import dev.ekhart.hzdemo.models.cluster.CacheStatisticsResponse;
 import dev.ekhart.hzdemo.models.cluster.ClusterDetailsResponse;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
@@ -60,18 +62,21 @@ public class HazelcastAnnotationService {
         return cacheStatistics(mapName, hazelcastInstance.getMap(mapName), executorService());
     }
 
-    List<Annotation> append(String documentId, Annotation annotation, IMap<String, List<String>> documentAnnotations,
+    List<Annotation> append(String documentId, Annotation annotation, IMap<String, Set<String>> documentAnnotations,
             IMap<String, Annotation> annotationObjects) {
         return appendAll(documentId, List.of(annotation), documentAnnotations, annotationObjects);
     }
 
     List<Annotation> appendAll(String documentId, List<Annotation> annotations,
-            IMap<String, List<String>> documentAnnotations, IMap<String, Annotation> annotationObjects) {
+            IMap<String, Set<String>> documentAnnotations, IMap<String, Annotation> annotationObjects) {
         documentAnnotations.lock(documentId);
         try {
-            List<String> currentIds = currentAnnotationIds(documentId, documentAnnotations);
+            LinkedHashSet<String> currentIds = currentAnnotationIds(documentId, documentAnnotations);
             Map<String, Annotation> newlyCreated = new java.util.LinkedHashMap<>();
             for (Annotation annotation : annotations) {
+                if (annotation.getDocId() == null || !annotation.getDocId().equals(documentId)) {
+                    annotation = annotation.toBuilder().docId(documentId).build();
+                }
                 Annotation existing = annotationObjects.putIfAbsent(annotation.getId(), annotation);
                 if (existing != null && !existing.equals(annotation)) {
                     throw new IllegalStateException("annotationId collision for id " + annotation.getId());
@@ -83,7 +88,7 @@ public class HazelcastAnnotationService {
             }
 
             try {
-                documentAnnotations.put(documentId, List.copyOf(currentIds));
+                documentAnnotations.put(documentId, Collections.unmodifiableSet(new LinkedHashSet<>(currentIds)));
             } catch (RuntimeException e) {
                 for (Annotation annotation : newlyCreated.values()) {
                     annotationObjects.remove(annotation.getId(), annotation);
@@ -97,11 +102,11 @@ public class HazelcastAnnotationService {
         }
     }
 
-    Optional<List<Annotation>> get(String documentId, IMap<String, List<String>> documentAnnotations,
+    Optional<List<Annotation>> get(String documentId, IMap<String, Set<String>> documentAnnotations,
             IMap<String, Annotation> annotationObjects) {
         documentAnnotations.lock(documentId);
         try {
-            List<String> annotationIds = documentAnnotations.get(documentId);
+            Set<String> annotationIds = documentAnnotations.get(documentId);
             if (annotationIds == null) {
                 return Optional.empty();
             }
@@ -109,6 +114,10 @@ public class HazelcastAnnotationService {
         } finally {
             documentAnnotations.unlock(documentId);
         }
+    }
+
+    public void clearAll() {
+        annotationObjects().clear();
     }
 
     public ClusterDetailsResponse clusterDetails() {
@@ -125,7 +134,7 @@ public class HazelcastAnnotationService {
                 .build();
     }
 
-    protected IMap<String, List<String>> documentAnnotations() {
+    protected IMap<String, Set<String>> documentAnnotations() {
         return hazelcastInstance.getMap(properties.getDocumentMapName());
     }
 
@@ -137,13 +146,13 @@ public class HazelcastAnnotationService {
         return hazelcastInstance.getExecutorService(CACHE_MAP_STATS_EXECUTOR);
     }
 
-    private List<String> currentAnnotationIds(String documentId, IMap<String, List<String>> documentAnnotations) {
-        List<String> currentIds = documentAnnotations.get(documentId);
-        return currentIds == null ? new ArrayList<>() : new ArrayList<>(currentIds);
+    private LinkedHashSet<String> currentAnnotationIds(String documentId, IMap<String, Set<String>> documentAnnotations) {
+        Set<String> currentIds = documentAnnotations.get(documentId);
+        return currentIds == null ? new LinkedHashSet<>() : new LinkedHashSet<>(currentIds);
     }
 
-    private List<Annotation> resolveAnnotations(List<String> annotationIds, IMap<String, Annotation> annotationObjects) {
-        Map<String, Annotation> annotationsById = annotationObjects.getAll(new LinkedHashSet<>(annotationIds));
+    private List<Annotation> resolveAnnotations(Set<String> annotationIds, IMap<String, Annotation> annotationObjects) {
+        Map<String, Annotation> annotationsById = annotationObjects.getAll(annotationIds);
         List<Annotation> resolved = new ArrayList<>(annotationIds.size());
         for (String annotationId : annotationIds) {
             Annotation annotation = annotationsById.get(annotationId);

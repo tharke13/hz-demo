@@ -2,7 +2,7 @@
 
 ## Status
 
-Current state: the demo is implemented as an append-only annotation cache backed by Hazelcast and MongoDB, with both local Compose and automated Testcontainers support working.
+Current state: the demo is implemented as an append-only annotation cache backed by Hazelcast, MongoDB, and RabbitMQ, with both local Compose and automated Testcontainers support working.
 
 ## Kept Decisions
 
@@ -14,7 +14,9 @@ Current state: the demo is implemented as an append-only annotation cache backed
 - The cache stores document-to-annotation relationships in two maps:
   - `document-annotation-ids`: `documentId -> List<String annotationId>`
   - `annotation-objects`: `annotationId -> Annotation`
-- Hazelcast uses Mongo-backed lazy loading and write-through persistence for both maps.
+- Hazelcast uses Mongo-backed lazy loading for both maps.
+- The document index map writes through to MongoDB.
+- The annotation object map publishes writes to RabbitMQ; a Spring AMQP listener consumes the stream and writes annotation objects to MongoDB.
 - The service layer owns the two-phase write and read coordination across the two maps.
 - Split-brain recovery for the document index map merges both id lists and deduplicates annotation ids while preserving order.
 - The public annotation API is append/read-only.
@@ -34,6 +36,10 @@ Current state: the demo is implemented as an append-only annotation cache backed
 - Persistence stores:
   - MongoDB collection `document-annotation-ids`
   - MongoDB collection `annotation-objects`
+- Annotation object stream:
+  - RabbitMQ durable topic exchange `hz-demo.annotation-objects`
+  - Routing key `annotation.objects`
+  - Durable Mongo sink queue `hz-demo.annotation-objects.mongo`
 
 ## Implemented Behavior
 
@@ -51,6 +57,8 @@ Current state: the demo is implemented as an append-only annotation cache backed
 - Batch append reuses the same document lock and two-map coordination, so one call can append multiple annotations without resubmitting the existing list.
 - Reads are coordinated in the service layer under the same document-level Hazelcast lock.
 - Mongo-backed lazy loading on Hazelcast members is enabled for both maps.
+- Annotation object map-store writes publish persistent JSON messages to RabbitMQ instead of directly writing to MongoDB.
+- The Spring AMQP listener consumes annotation object messages from the durable Mongo sink queue and upserts them into MongoDB.
 - Cache statistics are gathered by dispatching a member-side callable to every Hazelcast member and returning each member's `LocalMapStats` plus the cluster-wide map size.
 - Hazelcast split-brain merge uses `AnnotationIdListUnionMergePolicy` for the document index map, which preserves the existing side's order and appends only new annotation ids.
 - Full-key enumeration from Mongo is explicitly disabled; `loadAllKeys()` returns an empty iterable and never scans Mongo.
@@ -63,21 +71,22 @@ Current state: the demo is implemented as an append-only annotation cache backed
 - Reads depend on both maps being available; if the document index references an annotation id whose object is missing, the service fails the read with an inconsistency error.
 - The first read or append for a document that exists only in Mongo requires loading both the document index entry and any referenced annotation objects through Hazelcast map loaders.
 - Split-brain deduplication is hash-based; if two distinct annotations ever collide on the derived Murmur3 id, the merge policy will treat them as duplicates.
-- This design assumes append-only semantics for the public annotation API; if future code mutates cached lists outside the append path, Mongo persistence behavior will no longer match the intended contract.
+- This design assumes append-only semantics for the public annotation API; if future code mutates cached lists or annotation objects outside the append path, Mongo persistence behavior will no longer match the intended contract without corresponding stream handling.
 - `loadAllKeys()` is intentionally disabled, so any future feature that expects Hazelcast to enumerate all persisted document IDs through this loader will not work without redesign.
 
 ## Runtime Shape
 
-- `compose.yaml` starts MongoDB, 3 Hazelcast members, and Hazelcast Management Center.
+- `compose.yaml` starts MongoDB, RabbitMQ, 3 Hazelcast members, and Hazelcast Management Center.
 - The Hazelcast member image now bakes in both the member config and member-side runtime classes, so Compose and Testcontainers start members the same way.
 - Local Compose startup should use `docker compose up -d --build` after member image changes so the running cluster does not stay on a stale image.
 - Local Spring Boot dev profile runs on `8080`.
 - Local Hazelcast member ports are `5701`, `5702`, and `5703`.
+- RabbitMQ runs on AMQP port `5672` and management UI port `15672`.
 - Hazelcast Management Center runs on `8181`.
 
 ## Verification
 
-- `./mvnw test` on 2026-06-08
+- `./mvnw -pl hz-demo-client -am test`
 - Result: `BUILD SUCCESS`
 - Reactor modules passing:
   - `hz-demo-models`
@@ -91,7 +100,8 @@ Current state: the demo is implemented as an append-only annotation cache backed
   - append works for a document that exists only in Mongo and is not preloaded into Hazelcast
   - batch append works for a document that exists only in Mongo and is not preloaded into Hazelcast
   - cache-service unit coverage confirms the document index map store persists ordered annotation id lists
-  - cache-service unit coverage confirms the annotation object map store persists annotation objects by derived annotation id
+  - cache-service unit coverage confirms the annotation object map store publishes persistent annotation object messages by derived annotation id
+  - cache-service unit coverage confirms the RabbitMQ Mongo listener upserts annotation object messages into MongoDB
   - cache-service unit coverage confirms service-layer append rolls back a newly created annotation object if the document index write fails
   - cache-service unit coverage confirms service-layer batch append rolls back only newly created annotation objects if the document index write fails
   - cache-service unit coverage confirms cache statistics return the configured map name, cluster-wide entry count, and sorted per-member stats
@@ -102,4 +112,5 @@ Current state: the demo is implemented as an append-only annotation cache backed
   - controller `POST /api/annotations/{documentId}/batch` returns the latest full list and rejects an empty payload
   - controller cache-stats endpoints return serialized cache statistics responses
   - integration coverage confirms cache-stats reports both configured maps and returns 3 member-stat snapshots per map in a live cluster
+  - integration coverage confirms annotation objects are published through RabbitMQ and asynchronously persisted to MongoDB
   - both member-side loaders return no keys from `loadAllKeys()`, so Hazelcast cannot scan Mongo document IDs or annotation IDs through these components

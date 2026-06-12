@@ -11,15 +11,16 @@ import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
-import com.mongodb.client.model.ReplaceOptions;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.bson.Document;
 
-public class DocumentAnnotationIdsMapStore implements MapLoader<String, List<String>>, MapStore<String, List<String>>,
+public class DocumentAnnotationIdsMapStore implements MapLoader<String, Set<String>>, MapStore<String, Set<String>>,
         MapLoaderLifecycleSupport,
         MemberSideHazelcastComponent {
 
@@ -49,57 +50,46 @@ public class DocumentAnnotationIdsMapStore implements MapLoader<String, List<Str
     }
 
     @Override
-    public List<String> load(String key) {
-        Document document = collection.find(eq("_id", key)).first();
-        if (document == null) {
-            return null;
-        }
-        List<String> annotationIds = document.getList("annotationIds", String.class);
-        return annotationIds == null ? List.of() : List.copyOf(annotationIds);
+    public Set<String> load(String key) {
+        return collection.find(eq("docId", key))
+                .sort(new Document("start", 1).append("end", 1))
+                .map(doc -> doc.getString("id"))
+                .into(new LinkedHashSet<>());
     }
 
     @Override
-    public Map<String, List<String>> loadAll(Collection<String> keys) {
-        Map<String, List<String>> idsByDocumentId = new HashMap<>();
-        for (Document document : collection.find(in("_id", keys))) {
-            List<String> annotationIds = document.getList("annotationIds", String.class);
-            idsByDocumentId.put(document.getString("_id"), annotationIds == null ? List.of() : List.copyOf(annotationIds));
-        }
-        return idsByDocumentId;
+    public Map<String, Set<String>> loadAll(Collection<String> keys) {
+        return keys.stream()
+                .collect(Collectors.toMap(
+                        key -> key,
+                        this::load
+                ));
     }
 
     @Override
     public Iterable<String> loadAllKeys() {
-        return List.of();
+        return java.util.List.of();
     }
 
     @Override
-    public void store(String key, List<String> value) {
-        collection.replaceOne(
-                eq("_id", key),
-                new Document("_id", key)
-                        .append("documentId", key)
-                        .append("annotationIds", value == null ? List.of() : List.copyOf(value)),
-                new ReplaceOptions().upsert(true)
-        );
+    public void store(String key, Set<String> value) {
+        // The annotation IDs are not stored directly; they are derived from the docId field in the annotation objects.
     }
 
     @Override
-    public void storeAll(Map<String, List<String>> map) {
-        map.forEach(this::store);
+    public void storeAll(Map<String, Set<String>> map) {
+        // No-op
     }
 
     @Override
     public void delete(String key) {
-        collection.deleteOne(eq("_id", key));
+        // We do not delete annotations when the document ID list is removed from the cache.
+        // If document-level deletion is required, it should be handled explicitly.
     }
 
     @Override
     public void deleteAll(Collection<String> keys) {
-        if (keys.isEmpty()) {
-            return;
-        }
-        collection.deleteMany(in("_id", keys));
+        // No-op
     }
 
     private String requiredProperty(Properties properties, String key) {

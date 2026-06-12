@@ -1,6 +1,9 @@
 spring:
   application:
     name: hz-demo-client
+  rabbitmq:
+    host: localhost
+    port: 5672
 
 springdoc:
   swagger-ui:
@@ -17,3 +20,12 @@ app:
       - localhost:5701
       - localhost:5702
       - localhost:5703
+  annotation-object-stream:
+    exchange-name: hz-demo.annotation-objects
+    mongo-queue-name: hz-demo.annotation-objects.mongo
+    routing-key: annotation.objects
+  annotation-object-sink:
+    mongo:
+      connection-string: mongodb://localhost:27017/hz-demo
+      database: hz-demo
+      collection: annotation-objects

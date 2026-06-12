@@ -17,8 +17,8 @@ hazelcast:
           - hazelcast-3:5701
   map:
     document-annotation-ids:
-      backup-count: 2
-      async-backup-count: 0
+      backup-count: 1
+      async-backup-count: 2
       statistics-enabled: true
       per-entry-stats-enabled: true
       merge-policy:
@@ -31,11 +31,14 @@ hazelcast:
         properties:
           connection-string: mongodb://mongo:27017/hz-demo
           database: hz-demo
-          collection: document-annotation-ids
+          collection: annotation-objects
     annotation-objects:
-      backup-count: 2
-      async-backup-count: 0
+      backup-count: 1
+      async-backup-count: 2
       statistics-enabled: true
+      merge-policy:
+        batch-size: 100
+        class-name: com.hazelcast.spi.merge.PutIfAbsentMergePolicy
       map-store:
         enabled: true
         class-name: dev.ekhart.hzdemo.cacheservice.member.AnnotationObjectMapStore
@@ -44,3 +47,6 @@ hazelcast:
           connection-string: mongodb://mongo:27017/hz-demo
           database: hz-demo
           collection: annotation-objects
+          rabbitmq-uri: amqp://guest:guest@rabbitmq:5672/%2f
+          rabbitmq-exchange: hz-demo.annotation-objects
+          rabbitmq-routing-key: annotation.objects
